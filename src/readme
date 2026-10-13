@@ -1,0 +1,6 @@
+运行方式：
+python train_test_on_all_datasets_and_all_models.py
+split_data.py 用于将数据集划分为训练集和测试集
+dataset.py 用于读取数据，做数据预处理
+syntheticImage.py 给定一张肿瘤图像、肿瘤位置掩码、正常图像，生成一张合成图像以及肿瘤位置掩码
+syntheticStrategy2.py 按照策略2根据不同融合像素宽度，生成合成图像
