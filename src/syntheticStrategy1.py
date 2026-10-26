@@ -1,10 +1,9 @@
 import os
 import random
-from glob import glob
 import cv2
 import numpy as np
 import torch
-from syntheticImage import improve_mix
+from syntheticData import improve_mix
 
 # ---------------- 配置 ----------------
 BW = 20          # 融合边缘宽度控制
@@ -27,7 +26,6 @@ def seed_torch(seed):
 def make_dirs():
     for sub in ["benign", "benignMask", "malignant", "malignantMask"]:
         os.makedirs(os.path.join(DATASET_ROOT, DATASET_NAME, sub), exist_ok=True)
-
 
 def create_extend_datasets():
     with open(TRAIN_FILE, encoding="utf-8") as f:

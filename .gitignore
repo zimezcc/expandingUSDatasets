@@ -1,0 +1,16 @@
+# IDE 本地状态
+.idea/
+
+# 超过 GitHub 100MB 单文件限制的模型权重（另走网盘/Release 分发）
+src/checkpoints/CMUNet/train/best.pth
+src/checkpoints/CMUNet/train+normal/best.pth
+src/checkpoints/CMUNet/train+normal+synthetic2_BW0/best.pth
+src/checkpoints/CMUNet/train+normal+synthetic2_BW10/best.pth
+src/checkpoints/CMUNet/train+normal+synthetic2_BW20/best.pth
+src/checkpoints/CMUNet/train+normal+synthetic2_BW30/best.pth
+src/checkpoints/CMUNet/train+normal+synthetic2_BW40/best.pth
+src/checkpoints/CMUNet/train+synthetic1_BW20/best.pth
+src/checkpoints/CMUNet/train+synthetic2_BW20/best.pth
+
+# Python 缓存
+__pycache__/

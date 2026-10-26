@@ -9,8 +9,6 @@ from torchvision import transforms
 from torchvision.utils import save_image
 import torch.nn.functional as F
 import os
-import matplotlib.pyplot as plt
-# from utils import *
 
 __all__ = ['UNext']
 

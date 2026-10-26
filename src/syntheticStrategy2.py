@@ -4,13 +4,11 @@ from glob import glob
 import cv2
 import numpy as np
 import torch
-# from syntheticImage import improve_mix
-from syntheticData import improve_mix
+from src.syntheticData import improve_mix
 
 # ---------------- 配置 ----------------
 BW = 40          # 融合边缘宽度控制
 DATASET_NAME = f"BW{BW}"
-DATASET_NAME = f"BWRATIO_10"
 DATASET_ROOT = "../Datasets/SyntheticDataset2"
 NORMAL_DIR = "../Datasets/USDatasetsClean/normal"
 TRAIN_FILE = "train_data_list/train.txt"
@@ -70,7 +68,7 @@ def create_extend_datasets():
         # gen_image, gen_label = improve_mix(img, normal_img, mask, BW)
         # 当BW=0时，使用下面的语句
         # gen_image, gen_label = improve_mix(img, normal_img, mask, BW + 1)
-        gen_image, gen_label = improve_mix(img, normal_img, mask)
+        gen_image, gen_label = improve_mix(img, normal_img, mask, BW)
         cv2.imwrite(gen_img, gen_image)
         cv2.imwrite(gen_mask, gen_label)
         extends.append(gen_img)
