@@ -1,20 +1,10 @@
-"""
-MedNeXt 2D 实现（对齐官方 MIC-DKFZ/MedNeXt 结构）
-- 与官方差异修正:
-  1. Block 继承结构: MedNeXtDownBlock/MedNeXtUpBlock 继承 MedNeXtBlock
-  2. GroupNorm 改为 InstanceNorm 等效: GroupNorm(in_channels, in_channels)
-  3. Stem 改为 1x1 卷积 (官方用 kernel_size=1)
-  4. Skip connection 改为相加 (官方用 x_res + x_up, 非 concat)
-  5. UpBlock 非对称 padding (1,0,1,0) 替代 output_padding
-  6. 加入可选 GRN (全局响应归一化)
-"""
+
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
 
 class MedNeXtBlock(nn.Module):
-    """MedNeXt 基础块（2D 版，对齐官方 blocks.py）"""
 
     def __init__(self, in_channels, out_channels, exp_r=4, kernel_size=7,
                  do_res=True, norm_type='group', n_groups=None, dim='2d', grn=False):
@@ -38,8 +28,6 @@ class MedNeXtBlock(nn.Module):
             groups=in_channels if n_groups is None else n_groups,
         )
 
-        # Normalization Layer — 官方默认 GroupNorm(num_groups=in_channels, ...)
-        # 这等价于 InstanceNorm (每个通道独立归一化)
         if norm_type == 'group':
             self.norm = nn.GroupNorm(
                 num_groups=in_channels,
@@ -100,7 +88,6 @@ class MedNeXtBlock(nn.Module):
 
 
 class MedNeXtDownBlock(MedNeXtBlock):
-    """MedNeXt 下采样块（2D 版，继承 MedNeXtBlock，覆写 conv1 为 stride=2）"""
 
     def __init__(self, in_channels, out_channels, exp_r=4, kernel_size=7,
                  do_res=False, norm_type='group', dim='2d', grn=False):
@@ -146,7 +133,6 @@ class MedNeXtDownBlock(MedNeXtBlock):
 
 
 class MedNeXtUpBlock(MedNeXtBlock):
-    """MedNeXt 上采样块（2D 版，继承 MedNeXtBlock，用 ConvTranspose2d）"""
 
     def __init__(self, in_channels, out_channels, exp_r=4, kernel_size=7,
                  do_res=False, norm_type='group', dim='2d', grn=False):
@@ -217,20 +203,6 @@ class OutBlock(nn.Module):
 
 
 class MedNeXt2D(nn.Module):
-    """
-    MedNeXt 2D 分割网络（对齐官方 MIC-DKFZ/MedNeXt 结构）
-
-    参数:
-        in_channels: 输入通道数
-        n_classes: 输出类别数（二分类为 1）
-        preset: 'S' / 'B' / 'M' / 'L'
-        kernel_size: 深度卷积核大小（默认 5，可选 3/5/7）
-        deep_supervision: 是否启用深监督（训练时用）
-        do_res: 编码器/解码器 block 内部是否使用残差连接
-        do_res_up_down: 上下采样 block 是否使用额外残差连接
-        grn: 是否启用 GRN (全局响应归一化)
-    """
-
     PRESETS = {
         'S': {'n_channels': 32, 'exp_r': 2, 'block_counts': [2, 2, 2, 2, 2, 2, 2, 2, 2]},
         'B': {'n_channels': 32, 'exp_r': 3, 'block_counts': [2, 2, 2, 2, 2, 2, 2, 2, 2]},
