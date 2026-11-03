@@ -1,42 +1,10 @@
-"""
-ConvUNeXt_v2 — 针对合成数据域偏移问题的改进版本
-
-改进点：
-  1. DomainAdaptationBlock（编码器每阶段输出后）：
-     - SE (Squeeze-and-Excitation) 通道注意力，对合成数据带来的异常纹理做通道级抑制
-     - 残差结构，不影响原始信息通路
-  2. GatedSkipConnection（替换原有简单 cat + conv）：
-     - 显式建模"跳跃连接特征是否可信"
-     - 在合成数据上自动降低不可靠跳跃连接的权重
-  3. EarlySpatialAttention（Stem 后）：
-     - 对输入图像的空间异常区域做初步增强
-     - 帮助后续编码器聚焦于肿瘤区域而非背景纹理
-  4. base_channels 默认从 32 提升到 48，提升对域偏移的抵抗能力
-
-与原版完全兼容的接口：
-  - 参数名: num_classes -> n_classes, base_c -> base_channels
-  - 返回值: 直接返回 logits tensor（而非 Dict）
-
-尺寸约定（重要）：
-  - GatedSkipConnection.forward(x_decoder, x_skip)
-      x_decoder: 解码器侧特征，空间尺寸较小（将被 self.up 上采样 2 倍）
-      x_skip   : 编码器跳跃连接特征，空间尺寸较大（将与上采样后的解码器特征对齐）
-  - forward 中四个 up 块统一调用 self.upN(decoder_out, skip)
-"""
 
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
 
-# ==================== 改进1: 域适应块 ====================
 class DomainAdaptationBlock(nn.Module):
-    """通道级域适应块：SE 注意力 + 残差
-
-    作用：对编码器输出做通道重标定，抑制合成数据引入的异常纹理通道，
-    增强对真实图像友好的通道响应。相当于让模型"自动学会"在合成数据上
-    忽略那些只在特定 normal 图像背景上才出现的高响应通道。
-    """
 
     def __init__(self, channels, reduction=16):
         super(DomainAdaptationBlock, self).__init__()
@@ -63,12 +31,6 @@ class DomainAdaptationBlock(nn.Module):
 
 # ==================== 改进2: 早期空间注意力 ====================
 class EarlySpatialAttention(nn.Module):
-    """Stem 后的早期空间注意力
-
-    作用：对输入图像的空间纹理异常区域做增强/抑制。
-    合成数据的问题之一是背景 normal 图像带来的非真实纹理，
-    此模块帮助模型在浅层就学会聚焦于肿瘤区域。
-    """
 
     def __init__(self, in_channels, out_channels):
         super(EarlySpatialAttention, self).__init__()
@@ -97,13 +59,7 @@ class EarlySpatialAttention(nn.Module):
         feat = feat * mask
         return feat
 
-
-# ==================== 原有组件（原版实现） ====================
 class Conv(nn.Module):
-    """ConvNeXt 风格基础卷积块（官方原版）
-
-    结构: 7x7 depthwise conv (reflect padding) -> BN -> Linear(4C) -> GELU -> Linear(C) -> BN -> 残差+GELU
-    """
 
     def __init__(self, dim):
         super(Conv, self).__init__()
@@ -144,18 +100,7 @@ class Down(nn.Sequential):
         )
 
 
-# ==================== 改进3: 带显式门控的跳跃连接 ====================
 class GatedSkipConnection(nn.Module):
-    """改进的跳跃连接：显式建模"特征可信度"
-
-    语义约定（与 forward 调用一致）：
-      forward(x_decoder, x_skip)
-        x_decoder: 解码器侧特征，空间尺寸较小，将被 self.up 上采样 2 倍
-        x_skip   : 编码器跳跃连接特征，空间尺寸较大，用于与上采样后的解码器特征对齐
-
-    原版 ConvUNeXt 的门控注意力是内嵌在 Up 模块中的，这里将其显式化，
-    并加入可学习的"可信度"机制，让模型在合成数据上自动降低不可靠跳跃连接的权重。
-    """
 
     def __init__(self, x_decoder_channels, x_skip_channels, out_channels):
         super(GatedSkipConnection, self).__init__()
@@ -255,25 +200,6 @@ class OutConv(nn.Sequential):
 
 # ==================== 主模型 ====================
 class ConvUNeXt(nn.Module):
-    """ConvUNeXt_v2 — 针对合成数据域偏移问题的改进版本
-
-    改进点：
-      1. Stem 后增加 EarlySpatialAttention
-      2. 每个编码器下采样后增加 DomainAdaptationBlock
-      3. 解码器跳跃连接改为 GatedSkipConnection
-      4. base_channels 默认 32（与原版保持几何对称性）
-
-    尺寸约定：
-      - forward 中四个 up 块统一调用 self.upN(decoder_out, skip)
-      - upN 的第一个参数是解码器侧（小尺寸），第二个是 skip（大尺寸）
-      - upN 内部对解码器侧做 2 倍上采样，与 skip 对齐
-
-    参数:
-      in_channels: 输入通道数（默认 3）
-      n_classes: 输出类别数（默认 1）
-      bilinear: 是否使用双线性插值上采样（默认 True）
-      base_channels: 基础通道数（默认 32）
-    """
 
     def __init__(self,
                  in_channels: int = 3,
@@ -315,7 +241,6 @@ class ConvUNeXt(nn.Module):
         self.down4 = Down(base_c * 8, base_c * 16 // factor)
         self.adapt4 = DomainAdaptationBlock(base_c * 16 // factor)
 
-        # ---- 解码器 + 门控跳跃连接 ----
         # 参数顺序：x_decoder_channels（解码器侧，小尺寸）, x_skip_channels（skip，大尺寸）, out_channels
         # up1: decoder = x5 (base_c*16//factor @ H/16), skip = x4 (base_c*8 @ H/8)   -> out base_c*8  @ H/8
         # up2: decoder = up1 out (base_c*8 @ H/8),   skip = x3 (base_c*4 @ H/4)       -> out base_c*4  @ H/4
@@ -366,7 +291,6 @@ class ConvUNeXt(nn.Module):
 
 # ==================== 工厂函数 ====================
 def convunext_v2(base_channels=32):
-    """默认配置：base_channels=32（与原版几何对称）"""
     return ConvUNeXt(in_channels=3, n_classes=1, base_channels=base_channels)
 
 
