@@ -28,13 +28,10 @@ class DomainAdaptationBlock(nn.Module):
         # 残差通道注意力
         return x + x * w_vec
 
-
-# ==================== 改进2: 早期空间注意力 ====================
 class EarlySpatialAttention(nn.Module):
 
     def __init__(self, in_channels, out_channels):
         super(EarlySpatialAttention, self).__init__()
-        # 空间注意力：两层 3x3 conv 预测每个空间位置的重要性
         self.spatial_gate = nn.Sequential(
             nn.Conv2d(in_channels, out_channels, kernel_size=3, padding=1, bias=False),
             nn.BatchNorm2d(out_channels),
@@ -42,7 +39,7 @@ class EarlySpatialAttention(nn.Module):
             nn.Conv2d(out_channels, 1, kernel_size=1, bias=False),
             nn.Sigmoid(),
         )
-        # 特征增强
+
         self.feat_conv = nn.Sequential(
             nn.Conv2d(in_channels, out_channels, kernel_size=3, padding=1, bias=False),
             nn.BatchNorm2d(out_channels),
@@ -163,11 +160,9 @@ class GatedSkipConnection(nn.Module):
             crop_x2 = crop_x1 + x_skip_proj.size(3)
             x_dec_up = x_dec_up[:, :, crop_y1:crop_y2, crop_x1:crop_x2]
 
-        # ---------- 显式可信度门控（作用于解码器侧上采样特征） ----------
         gate_w = self.gate_score(x_dec_up)                    # [B, 1, H, W]
         x_dec_gated = x_dec_up * gate_w                       # [B, C, H, W]
 
-        # ---------- ConvUNeXt 风格门控注意力（gate 基于解码器侧，作用于 skip） ----------
         B, C, H, W = x_dec_gated.shape
         x_dec_perm = x_dec_gated.permute(0, 2, 3, 1)          # [B, H, W, C]
         x_skip_perm = x_skip_proj.permute(0, 2, 3, 1)         # [B, H, W, C]
@@ -178,11 +173,9 @@ class GatedSkipConnection(nn.Module):
                        + torch.sigmoid(g2) * torch.tanh(g3))
         x_skip_perm = self.conv_linear2(x_skip_perm)          # [B, H, W, C]
 
-        # 投影回 skip 原始通道数 C2
         x_skip_perm = x_skip_perm.permute(0, 3, 1, 2)         # [B, C, H, W]
         x_skip_gated = self.proj_skip_back(x_skip_perm)       # [B, C2, H, W]
 
-        # ---------- 拼接 + 融合 ----------
         x_cat = torch.cat([x_dec_gated, x_skip_gated], dim=1)  # [B, C+C2, H, W]
         x = self.conv1x1(x_cat)
         x = self.conv(x)
@@ -197,8 +190,6 @@ class OutConv(nn.Sequential):
             nn.Conv2d(in_channels, num_classes, kernel_size=1)
         )
 
-
-# ==================== 主模型 ====================
 class ConvUNeXt(nn.Module):
 
     def __init__(self,
@@ -214,7 +205,6 @@ class ConvUNeXt(nn.Module):
         base_c = base_channels
         factor = 2 if bilinear else 1
 
-        # ---- Stem + 早期空间注意力 ----
         self.in_conv = nn.Sequential(
             nn.Conv2d(in_channels, base_c, kernel_size=7, padding=3, padding_mode='reflect'),
             nn.BatchNorm2d(base_c),
@@ -288,13 +278,10 @@ class ConvUNeXt(nn.Module):
         logits = self.out_conv(x)
         return logits
 
-
-# ==================== 工厂函数 ====================
 def convunext_v2(base_channels=32):
     return ConvUNeXt(in_channels=3, n_classes=1, base_channels=base_channels)
 
 
-# ==================== 测试 ====================
 if __name__ == '__main__':
     model = ConvUNeXt(in_channels=3, n_classes=2, base_channels=48)
 
